@@ -14,11 +14,15 @@ extern crate gpt;
 //extern crate uuid;
 
 use std::env;
-use std::fs::File;
+use std::path::PathBuf;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::io::FromRawFd;
 use std::process;
 
+pub const SECTORSIZE: u32 = 512;
+pub mod partition;
+use self::partition::{get_partitions, DiskPartition};
 //use redoxfs::{DiskCache, DiskFile, mount};
 //use uuid::Uuid;
 
@@ -46,12 +50,6 @@ fn usage() {
     println!("redox-fatd [mount-prefix]");
 }
 
-/*
-enum DiskId {
-    Path(String),
-    Uuid(Uuid),
-}
-*/
 #[cfg(not(target_os = "redox"))]
 fn disk_paths(_paths: &mut Vec<String>) {}
 
@@ -110,9 +108,10 @@ fn daemon(mountpoint: &str, mut write: File) -> ! {
         },
     }
 */
+
 /*
     for path in paths {
-        println!("redoxfs: opening {}", path);
+        println!("redox-fatd: opening {}", path);
         match DiskFile::open(&path).map(|image| DiskCache::new(image)) {
             Ok(disk) => match redoxfs::FileSystem::open(disk) {
                 Ok(filesystem) => {
@@ -166,7 +165,7 @@ fn daemon(mountpoint: &str, mut write: File) -> ! {
 
 fn main() {
     let mut args = env::args().skip(1);
-    let mountpoint = match args.next() {
+    let mountprefix = match args.next() {
         Some(arg) => arg,
         None => {
             println!("redox-fatd: no mount-prefix provided");
@@ -174,6 +173,25 @@ fn main() {
             process::exit(1);
         }
     };
+    let mut paths = vec![];
+    disk_paths(&mut paths);
+
+    for path in paths.iter() {
+        let fat_partitions = match get_partitions(PathBuf::from(path), 0xc) {
+            Ok(vec) => vec,
+            Err(e) => {
+                println!("Error detected {}", e);
+                process::exit(-1);
+            }
+        };
+        for partition in fat_partitions {
+            let disk_file = OpenOptions::new().write(true).read(true).open(path).expect("Path Open Error");
+            let disk_part = DiskPartition::new(disk_file, partition);
+            // TODO mount disk_part
+            println!("Disk Partition: {:?}", disk_part);
+        }
+    }
+
 
     let mut pipes = [0; 2];
     if pipe(&mut pipes) == 0 {
@@ -184,7 +202,7 @@ fn main() {
         if pid == 0 {
             drop(read);
 
-            daemon(&mountpoint, write);
+            daemon(&mountprefix, write);
         } else if pid > 0 {
             drop(write);
 
