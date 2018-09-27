@@ -1,4 +1,6 @@
+// The glue that binds DiskPartition to fatfs
 use std::io::{Read, Write, Seek, SeekFrom};
+use std::cmp::{min, max};
 use std::fs::File;
 use std::path::PathBuf;
 //use syscall::error::{Error, Result, EIO};
@@ -40,6 +42,9 @@ impl DiskPartition {
             byte_offset: 0
         }
     }
+    fn get_size(&self) -> u32 {
+        self.partition.p_size * SECTORSIZE
+    }
 }
 
 impl Read for DiskPartition {
@@ -67,9 +72,9 @@ impl Seek for DiskPartition {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         
         self.byte_offset = match pos {
-            SeekFrom::Current(off) => ((self.byte_offset as i64) + off) as u64,
-            SeekFrom::Start(off) => off,
-            SeekFrom::End(off) => ((self.partition.p_size * SECTORSIZE) as i64 + off) as u64
+            SeekFrom::Current(off)  => max(0, min(self.get_size() as i64, self.byte_offset as i64 + off)) as u64,
+            SeekFrom::Start(off)    => max(0, min(self.get_size() as u64, off)) as u64,
+            SeekFrom::End(off)      => max(0, min(self.get_size() as i64, self.get_size() as i64 + off)) as u64
         };
 
         Ok(self.byte_offset)
