@@ -1,4 +1,4 @@
-#![deny(warnings)]
+//#![deny(warnings)]
 #![cfg_attr(unix, feature(libc))]
 
 #[cfg(unix)]
@@ -22,6 +22,7 @@ use std::process;
 
 pub const SECTORSIZE: u32 = 512;
 pub mod partition;
+pub mod mount; 
 use self::partition::{get_partitions, DiskPartition};
 //use redoxfs::{DiskCache, DiskFile, mount};
 //use uuid::Uuid;
