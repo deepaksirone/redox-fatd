@@ -28,14 +28,14 @@ pub fn get_partitions(filepath: PathBuf, typ: u8) -> Result<Vec<Partition>> {
 }
 
 #[derive(Debug)]
-pub struct DiskPartition {
-    diskfile: File,
+pub struct DiskPartition<D: Read + Write + Seek> {
+    diskfile: D,
     partition: Partition,
     byte_offset: u64,
 }
 
-impl DiskPartition {
-    pub fn new(disk: File, part: Partition) -> Self {
+impl<D: Read + Write + Seek>  DiskPartition<D> {
+    pub fn new(disk: D, part: Partition) -> Self {
         DiskPartition {
             diskfile: disk,
             partition: part,
@@ -47,7 +47,7 @@ impl DiskPartition {
     }
 }
 
-impl Read for DiskPartition {
+impl<D: Read + Write + Seek>  Read for DiskPartition<D> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         try_disk!(self.diskfile.seek(SeekFrom::Start((SECTORSIZE * self.partition.p_lba) as u64 + self.byte_offset)));
         let count = try_disk!(self.diskfile.read(buf));
@@ -56,7 +56,7 @@ impl Read for DiskPartition {
 
 }
 
-impl Write for DiskPartition {
+impl<D: Read + Write + Seek>  Write for DiskPartition<D> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         try_disk!(self.diskfile.seek(SeekFrom::Start((SECTORSIZE * self.partition.p_lba) as u64 + self.byte_offset)));
         let count = try_disk!(self.diskfile.write(buf));
@@ -68,7 +68,7 @@ impl Write for DiskPartition {
     }
 }
 
-impl Seek for DiskPartition {
+impl<D: Read + Write + Seek>  Seek for DiskPartition<D> {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         
         self.byte_offset = match pos {
