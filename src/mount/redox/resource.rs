@@ -1,6 +1,7 @@
 use std::cmp::{min, max};
 //use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{Read, Write, Seek};
+use fatfs::FileSystem;
 
 use syscall::data::TimeSpec;
 use syscall::error::{Result};
@@ -14,20 +15,20 @@ use partition::DiskPartition;
 pub trait Resource<D: Read + Write + Seek> {
     fn block(&self) -> u64;
     fn dup(&self) -> Result<Box<Resource<D>>>;
-    fn read(&mut self, buf: &mut [u8], fs: &mut DiskPartition<D>) -> Result<usize>;
-    fn write(&mut self, buf: &[u8], fs: &mut DiskPartition<D>) -> Result<usize>;
-    fn seek(&mut self, offset: usize, whence: usize, fs: &mut DiskPartition<D>) -> Result<usize>;
+    fn read(&mut self, buf: &mut [u8], fs: &mut FileSystem<D>) -> Result<usize>;
+    fn write(&mut self, buf: &[u8], fs: &mut FileSystem<D>) -> Result<usize>;
+    fn seek(&mut self, offset: usize, whence: usize, fs: &mut FileSystem<D>) -> Result<usize>;
     //TODO: Implement fmap
     //fn fmap(&mut self, offset: usize, size: usize, maps: &mut Fmaps, fs: &mut DiskPartition) -> Result<usize>;
     //fn funmap(&mut self, maps: &mut Fmaps, fs: &mut DiskPartition) -> Result<usize>;
-    fn fchmod(&mut self, mode: u16, fs: &mut DiskPartition<D>) -> Result<usize>;
-    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut DiskPartition<D>) -> Result<usize>;
+    fn fchmod(&mut self, mode: u16, fs: &mut FileSystem<D>) -> Result<usize>;
+    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FileSystem<D>) -> Result<usize>;
     fn fcntl(&mut self, cmd: usize, arg: usize) -> Result<usize>;
     fn path(&self, buf: &mut [u8]) -> Result<usize>;
-    fn stat(&self, _stat: &mut Stat, fs: &mut DiskPartition<D>) -> Result<usize>;
+    fn stat(&self, _stat: &mut Stat, fs: &mut FileSystem<D>) -> Result<usize>;
     //fn sync(&mut self, maps: &mut Fmaps, fs: &mut DiskPartition) -> Result<usize>;
-    fn truncate(&mut self, len: usize, fs: &mut DiskPartition<D>) -> Result<usize>;
-    fn utimens(&mut self, times: &[TimeSpec], fs: &mut DiskPartition<D>) -> Result<usize>;
+    fn truncate(&mut self, len: usize, fs: &mut FileSystem<D>) -> Result<usize>;
+    fn utimens(&mut self, times: &[TimeSpec], fs: &mut FileSystem<D>) -> Result<usize>;
 }
 
 pub struct DirResource {
@@ -65,7 +66,7 @@ impl<D: Read + Write + Seek> Resource<D> for DirResource {
         }))
     }
 
-    fn read(&mut self, buf: &mut [u8], _fs: &mut DiskPartition<D>) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8], _fs: &mut FileSystem<D>) -> Result<usize> {
         let data = self.data.as_ref().ok_or(Error::new(EISDIR))?;
         let mut i = 0;
         while i < buf.len() && self.seek < data.len() {
@@ -76,11 +77,11 @@ impl<D: Read + Write + Seek> Resource<D> for DirResource {
         Ok(i)
     }
 
-    fn write(&mut self, _buf: &[u8], _fs: &mut DiskPartition<D>) -> Result<usize> {
+    fn write(&mut self, _buf: &[u8], _fs: &mut FileSystem<D>) -> Result<usize> {
         Err(Error::new(EBADF))
     }
 
-    fn seek(&mut self, offset: usize, whence: usize, _fs: &mut DiskPartition<D>) -> Result<usize> {
+    fn seek(&mut self, offset: usize, whence: usize, _fs: &mut FileSystem<D>) -> Result<usize> {
         let data = self.data.as_ref().ok_or(Error::new(EBADF))?;
         self.seek = match whence {
             SEEK_SET => max(0, min(data.len() as isize, offset as isize)) as usize,
@@ -92,11 +93,11 @@ impl<D: Read + Write + Seek> Resource<D> for DirResource {
         Ok(self.seek)
     }
 
-    fn fchmod(&mut self, mode: u16, fs: &mut DiskPartition<D>) -> Result<usize> {
+    fn fchmod(&mut self, mode: u16, fs: &mut FileSystem<D>) -> Result<usize> {
         Ok(0) // FAT32 does not support file permissions
     }
 
-    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut DiskPartition<D>) -> Result<usize> {
+    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FileSystem<D>) -> Result<usize> {
         Ok(0) // FAT32 does not support file permissions
     }
 
@@ -117,7 +118,7 @@ impl<D: Read + Write + Seek> Resource<D> for DirResource {
     }
 
     //TODO: Implement this using the FAT32 node metadata
-    fn stat(&self, stat: &mut Stat, fs: &mut DiskPartition<D>) -> Result<usize> {
+    fn stat(&self, stat: &mut Stat, fs: &mut FileSystem<D>) -> Result<usize> {
        /* let node = fs.node(self.block)?;
 
         *stat = Stat {
@@ -138,11 +139,11 @@ impl<D: Read + Write + Seek> Resource<D> for DirResource {
         Ok(0)
     }
 
-    fn truncate(&mut self, _len: usize, _fs: &mut DiskPartition<D>) -> Result<usize> {
+    fn truncate(&mut self, _len: usize, _fs: &mut FileSystem<D>) -> Result<usize> {
         Err(Error::new(EBADF))
     }
 
-    fn utimens(&mut self, _times: &[TimeSpec], _fs: &mut DiskPartition<D>) -> Result<usize> {
+    fn utimens(&mut self, _times: &[TimeSpec], _fs: &mut FileSystem<D>) -> Result<usize> {
         Err(Error::new(EBADF))
     }
 }

@@ -10,6 +10,7 @@ redox_syscall = "0.1.40"
 mbr = "0.2.2"
 gpt = "0.2.2"
 fatfs = "0.3.0"
+fscommon = "0.1.0"
 
 [target.'cfg(unix)'.dependencies]
 fuse = "0.3"

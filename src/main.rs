@@ -10,8 +10,7 @@ extern crate syscall;
 extern crate fatfs;
 extern crate mbr;
 extern crate gpt;
-//extern crate redoxfs;
-//extern crate uuid;
+extern crate fscommon;
 
 use std::env;
 use std::path::PathBuf;
