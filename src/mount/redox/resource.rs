@@ -1,7 +1,7 @@
 use std::cmp::{min, max};
 //use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{Read, Write, Seek};
-use fatfs::FileSystem;
+use fatfs::{FileSystem, File};
 
 use syscall::data::TimeSpec;
 use syscall::error::{Result};
@@ -146,4 +146,8 @@ impl<D: Read + Write + Seek> Resource<D> for DirResource {
     fn utimens(&mut self, _times: &[TimeSpec], _fs: &mut FileSystem<D>) -> Result<usize> {
         Err(Error::new(EBADF))
     }
+}
+
+struct FileResource<'a, T: Read + Write + Seek + 'a> {
+    file: File<'a, T>
 }
