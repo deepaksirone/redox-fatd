@@ -1,7 +1,8 @@
 use std::cmp::{min, max};
 //use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{Read, Write, Seek};
-use fatfs::{FileSystem, File};
+use fatfs::{FileSystem, File, Dir};
+use std::cell::RefCell;
 
 use syscall::data::TimeSpec;
 use syscall::error::{Result};
@@ -14,8 +15,8 @@ use partition::DiskPartition;
 
 pub trait Resource<D: Read + Write + Seek> {
     fn block(&self) -> u64;
-    fn dup(&self) -> Result<Box<Resource<D>>>;
-    fn read(&mut self, buf: &mut [u8], fs: &mut FileSystem<D>) -> Result<usize>;
+    //fn dup(&self) -> Result<Box<Resource<D>>>;
+    fn read(&mut self, buf: &mut [u8], _fs: &mut FileSystem<D>) -> Result<usize>;
     fn write(&mut self, buf: &[u8], fs: &mut FileSystem<D>) -> Result<usize>;
     fn seek(&mut self, offset: usize, whence: usize, fs: &mut FileSystem<D>) -> Result<usize>;
     //TODO: Implement fmap
@@ -31,41 +32,44 @@ pub trait Resource<D: Read + Write + Seek> {
     fn utimens(&mut self, times: &[TimeSpec], fs: &mut FileSystem<D>) -> Result<usize>;
 }
 
-pub struct DirResource {
+pub struct DirResource<'a, T: Read + Write + Seek + 'a> {
     path: String,
     block: u64,
     data: Option<Vec<u8>>,
     seek: usize,
     uid: u32,
+    dir: RefCell<Dir<'a, T>>
 }
 
-impl DirResource {
-    pub fn new(path: String, block: u64, data: Option<Vec<u8>>, uid: u32) -> DirResource {
+impl<'a, T: Read + Write + Seek + 'a> DirResource<'a, T> {
+    pub fn new(path: String, block: u64, data: Option<Vec<u8>>, uid: u32, dir: Dir<'a, T>) -> DirResource<'a, T> {
         DirResource {
             path: path,
             block: block,
             data: data,
             seek: 0,
             uid: uid,
+            dir: RefCell::new(dir)
         }
     }
 }
 
-impl<D: Read + Write + Seek> Resource<D> for DirResource {
+impl<'a, D: Read + Write + Seek + 'a> Resource<D> for DirResource<'a, D> {
     fn block(&self) -> u64 {
         self.block
     }
-
+/*
     fn dup(&self) -> Result<Box<Resource<D>>> {
         Ok(Box::new(DirResource {
             path: self.path.clone(),
             block: self.block,
             data: self.data.clone(),
             seek: self.seek,
-            uid: self.uid
+            uid: self.uid,
+            dir: self.dir.clone()
         }))
     }
-
+*/
     fn read(&mut self, buf: &mut [u8], _fs: &mut FileSystem<D>) -> Result<usize> {
         let data = self.data.as_ref().ok_or(Error::new(EISDIR))?;
         let mut i = 0;
