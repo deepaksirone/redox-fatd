@@ -4,7 +4,9 @@ use syscall;
 use std::fs::File;
 use std::io::{self, Read, Write, Seek};
 use std::path::Path;
+
 mod resource;
+mod scheme;
 
 pub fn mount<D: Read + Write + Seek, P: AsRef<Path>, F: FnMut()>(_filesystem: D, mountpoint: &P, mut callback: F) -> io::Result<()> {
     let mountpoint = mountpoint.as_ref();
