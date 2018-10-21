@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use syscall::data::TimeSpec;
 use syscall::error::{Result};
 use syscall::{Error, EBADF, EBUSY, EINVAL, EISDIR, EPERM};
-//use syscall::flag::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR, F_GETFL, F_SETFL, MODE_PERM};
+use syscall::flag::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR, F_GETFL, F_SETFL, MODE_PERM};
 use syscall::{Stat, SEEK_SET, SEEK_CUR, SEEK_END};
 //use syscall::{Stat};
 
@@ -152,6 +152,163 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for DirResource<'a, D> {
     }
 }
 
-struct FileResource<'a, T: Read + Write + Seek + 'a> {
+pub struct FileResource<'a, T: Read + Write + Seek + 'a> {
+    path: String,
+    block: u64,
+    flags: usize,
+    seek: u64,
+    uid: u32,
     file: File<'a, T>
+}
+
+impl<'a, T: Read + Write + Seek + 'a> FileResource<'a, T> {
+    pub fn new(fpath: String, block: u64, flags: usize, seek: u64, uid: u32, file: File<T>) -> FileResource<T> {
+        FileResource {
+            path: fpath,
+            block: block,
+            flags: flags,
+            seek: seek,
+            uid: uid,
+            file: file
+        }
+    }
+}
+
+impl<'a, D: Read + Write + Seek + 'a> Resource<D> for FileResource<'a, D> {
+    fn block(&self) -> u64 {
+        self.block
+    }
+    /*
+    fn dup(&self) -> Result<Box<Resource<D>>> {
+        Ok(Box::new(FileResource {
+            path: self.path.clone(),
+            block: self.block,
+            flags: self.flags,
+            seek: self.seek,
+            uid: self.uid,
+            fmap: None
+        }))
+    }
+    */
+    fn read(&mut self, buf: &mut [u8], fs: &mut FileSystem<D>) -> Result<usize> {
+        /*if self.flags & O_ACCMODE == O_RDWR || self.flags & O_ACCMODE == O_RDONLY {
+            let count = fs.read_node(self.block, self.seek, buf)?;
+            self.seek += count as u64;
+            Ok(count)
+        } else {
+            Err(Error::new(EBADF))
+        }*/
+        Ok(0) // TODO
+    }
+
+    fn write(&mut self, buf: &[u8], fs: &mut FileSystem<D>) -> Result<usize> {
+        /*if self.flags & O_ACCMODE == O_RDWR || self.flags & O_ACCMODE == O_WRONLY {
+            let mtime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+            let count = fs.write_node(self.block, self.seek, buf, mtime.as_secs(), mtime.subsec_nanos())?;
+            self.seek += count as u64;
+            Ok(count)
+        } else {
+            Err(Error::new(EBADF))
+        }*/
+        Ok(0) // TODO
+    }
+    
+    fn seek(&mut self, offset: usize, whence: usize, fs: &mut FileSystem<D>) -> Result<usize> {
+        /*let size = fs.node_len(self.block)?;
+
+        self.seek = match whence {
+            SEEK_SET => max(0, offset as i64) as u64,
+            SEEK_CUR => max(0, self.seek as i64 + offset as i64) as u64,
+            SEEK_END => max(0, size as i64 + offset as i64) as u64,
+            _ => return Err(Error::new(EINVAL))
+        };
+
+        Ok(self.seek as usize)
+        */
+        Ok(0) // TODO
+    }
+
+    fn fchmod(&mut self, mode: u16, fs: &mut FileSystem<D>) -> Result<usize> {
+        Ok(0) // FAT does not have file permissions
+    }
+
+    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FileSystem<D>) -> Result<usize> {
+        Ok(0) // FAT does not have file permissions
+    }
+
+    fn fcntl(&mut self, cmd: usize, arg: usize) -> Result<usize> {
+        match cmd {
+            F_GETFL => Ok(self.flags),
+            F_SETFL => {
+                self.flags = (self.flags & O_ACCMODE) | (arg & ! O_ACCMODE);
+                Ok(0)
+            },
+            _ => Err(Error::new(EINVAL))
+        }
+    }
+
+    fn path(&self, buf: &mut [u8]) -> Result<usize> {
+        let path = self.path.as_bytes();
+
+        let mut i = 0;
+        while i < buf.len() && i < path.len() {
+            buf[i] = path[i];
+            i += 1;
+        }
+
+        Ok(i)
+    }
+
+    fn stat(&self, stat: &mut Stat, fs: &mut FileSystem<D>) -> Result<usize> {
+        /*let node = fs.node(self.block)?;
+
+        *stat = Stat {
+            st_dev: 0, // TODO
+            st_ino: node.0,
+            st_mode: node.1.mode,
+            st_nlink: 1,
+            st_uid: node.1.uid,
+            st_gid: node.1.gid,
+            st_size: fs.node_len(self.block)?,
+            st_mtime: node.1.mtime,
+            st_mtime_nsec: node.1.mtime_nsec,
+            st_ctime: node.1.ctime,
+            st_ctime_nsec: node.1.ctime_nsec,
+            ..Default::default()
+        };
+        */
+        Ok(0)
+    }
+    
+    fn truncate(&mut self, len: usize, fs: &mut FileSystem<D>) -> Result<usize> {
+        /*if self.flags & O_ACCMODE == O_RDWR || self.flags & O_ACCMODE == O_WRONLY {
+            fs.node_set_len(self.block, len as u64)?;
+            Ok(0)
+        } else {
+            Err(Error::new(EBADF))
+        }*/
+        Ok(0) // TODO
+
+    }
+
+    fn utimens(&mut self, times: &[TimeSpec], fs: &mut FileSystem<D>) -> Result<usize> {
+        /*let mut node = fs.node(self.block)?;
+
+        if node.1.uid == self.uid || self.uid == 0 {
+            if let Some(mtime) = times.get(1) {
+
+                node.1.mtime = mtime.tv_sec as u64;
+                node.1.mtime_nsec = mtime.tv_nsec as u32;
+
+                fs.write_at(node.0, &node.1)?;
+
+                Ok(0)
+            } else {
+                Ok(0)
+            }
+        } else {
+            Err(Error::new(EPERM))
+        }*/
+        Ok(0) // TODO
+    }
 }
