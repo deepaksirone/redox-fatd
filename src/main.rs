@@ -7,7 +7,7 @@ extern crate libc;
 #[cfg(target_os = "redox")]
 extern crate syscall;
 
-extern crate fatfs;
+extern crate fat;
 extern crate mbr;
 extern crate gpt;
 extern crate fscommon;

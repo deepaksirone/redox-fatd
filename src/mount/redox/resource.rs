@@ -1,7 +1,8 @@
 use std::cmp::{min, max};
 //use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{Read, Write, Seek};
-use fatfs::{FileSystem, File, Dir};
+//use fatfs::{FileSystem, File, Dir};
+use fat::{FatFileSystem, File, Directory};
 use std::cell::RefCell;
 
 use syscall::data::TimeSpec;
@@ -16,20 +17,20 @@ use partition::DiskPartition;
 pub trait Resource<D: Read + Write + Seek> {
     fn block(&self) -> u64;
     //fn dup(&self) -> Result<Box<Resource<D>>>;
-    fn read(&mut self, buf: &mut [u8], _fs: &mut FileSystem<D>) -> Result<usize>;
-    fn write(&mut self, buf: &[u8], fs: &mut FileSystem<D>) -> Result<usize>;
-    fn seek(&mut self, offset: usize, whence: usize, fs: &mut FileSystem<D>) -> Result<usize>;
+    fn read(&mut self, buf: &mut [u8], _fs: &mut FatFileSystem<D>) -> Result<usize>;
+    fn write(&mut self, buf: &[u8], fs: &mut FatFileSystem<D>) -> Result<usize>;
+    fn seek(&mut self, offset: usize, whence: usize, fs: &mut FatFileSystem<D>) -> Result<usize>;
     //TODO: Implement fmap
     //fn fmap(&mut self, offset: usize, size: usize, maps: &mut Fmaps, fs: &mut DiskPartition) -> Result<usize>;
     //fn funmap(&mut self, maps: &mut Fmaps, fs: &mut DiskPartition) -> Result<usize>;
-    fn fchmod(&mut self, mode: u16, fs: &mut FileSystem<D>) -> Result<usize>;
-    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FileSystem<D>) -> Result<usize>;
+    fn fchmod(&mut self, mode: u16, fs: &mut FatFileSystem<D>) -> Result<usize>;
+    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FatFileSystem<D>) -> Result<usize>;
     fn fcntl(&mut self, cmd: usize, arg: usize) -> Result<usize>;
     fn path(&self, buf: &mut [u8]) -> Result<usize>;
-    fn stat(&self, _stat: &mut Stat, fs: &mut FileSystem<D>) -> Result<usize>;
+    fn stat(&self, _stat: &mut Stat, fs: &mut FatFileSystem<D>) -> Result<usize>;
     //fn sync(&mut self, maps: &mut Fmaps, fs: &mut DiskPartition) -> Result<usize>;
-    fn truncate(&mut self, len: usize, fs: &mut FileSystem<D>) -> Result<usize>;
-    fn utimens(&mut self, times: &[TimeSpec], fs: &mut FileSystem<D>) -> Result<usize>;
+    fn truncate(&mut self, len: usize, fs: &mut FatFileSystem<D>) -> Result<usize>;
+    fn utimens(&mut self, times: &[TimeSpec], fs: &mut FatFileSystem<D>) -> Result<usize>;
 }
 
 pub struct DirResource<'a, T: Read + Write + Seek + 'a> {
@@ -38,18 +39,18 @@ pub struct DirResource<'a, T: Read + Write + Seek + 'a> {
     data: Option<Vec<u8>>,
     seek: usize,
     uid: u32,
-    dir: RefCell<Dir<'a, T>>
+    //dir: RefCell<Dir<'a, T>>
 }
 
 impl<'a, T: Read + Write + Seek + 'a> DirResource<'a, T> {
-    pub fn new(path: String, block: u64, data: Option<Vec<u8>>, uid: u32, dir: Dir<'a, T>) -> DirResource<'a, T> {
+    pub fn new(path: String, block: u64, data: Option<Vec<u8>>, uid: u32) -> DirResource<'a, T> {
         DirResource {
             path: path,
             block: block,
             data: data,
             seek: 0,
             uid: uid,
-            dir: RefCell::new(dir)
+            //dir: RefCell::new(dir)
         }
     }
 }
@@ -70,7 +71,7 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for DirResource<'a, D> {
         }))
     }
 */
-    fn read(&mut self, buf: &mut [u8], _fs: &mut FileSystem<D>) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8], _fs: &mut FatFileSystem<D>) -> Result<usize> {
         let data = self.data.as_ref().ok_or(Error::new(EISDIR))?;
         let mut i = 0;
         while i < buf.len() && self.seek < data.len() {
@@ -81,11 +82,11 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for DirResource<'a, D> {
         Ok(i)
     }
 
-    fn write(&mut self, _buf: &[u8], _fs: &mut FileSystem<D>) -> Result<usize> {
+    fn write(&mut self, _buf: &[u8], _fs: &mut FatFileSystem<D>) -> Result<usize> {
         Err(Error::new(EBADF))
     }
 
-    fn seek(&mut self, offset: usize, whence: usize, _fs: &mut FileSystem<D>) -> Result<usize> {
+    fn seek(&mut self, offset: usize, whence: usize, _fs: &mut FatFileSystem<D>) -> Result<usize> {
         let data = self.data.as_ref().ok_or(Error::new(EBADF))?;
         self.seek = match whence {
             SEEK_SET => max(0, min(data.len() as isize, offset as isize)) as usize,
@@ -97,11 +98,11 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for DirResource<'a, D> {
         Ok(self.seek)
     }
 
-    fn fchmod(&mut self, mode: u16, fs: &mut FileSystem<D>) -> Result<usize> {
+    fn fchmod(&mut self, mode: u16, fs: &mut FatFileSystem<D>) -> Result<usize> {
         Ok(0) // FAT32 does not support file permissions
     }
 
-    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FileSystem<D>) -> Result<usize> {
+    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FatFileSystem<D>) -> Result<usize> {
         Ok(0) // FAT32 does not support file permissions
     }
 
@@ -122,7 +123,7 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for DirResource<'a, D> {
     }
 
     //TODO: Implement this using the FAT32 node metadata
-    fn stat(&self, stat: &mut Stat, fs: &mut FileSystem<D>) -> Result<usize> {
+    fn stat(&self, stat: &mut Stat, fs: &mut FatFileSystem<D>) -> Result<usize> {
        /* let node = fs.node(self.block)?;
 
         *stat = Stat {
@@ -143,11 +144,11 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for DirResource<'a, D> {
         Ok(0)
     }
 
-    fn truncate(&mut self, _len: usize, _fs: &mut FileSystem<D>) -> Result<usize> {
+    fn truncate(&mut self, _len: usize, _fs: &mut FatFileSystem<D>) -> Result<usize> {
         Err(Error::new(EBADF))
     }
 
-    fn utimens(&mut self, _times: &[TimeSpec], _fs: &mut FileSystem<D>) -> Result<usize> {
+    fn utimens(&mut self, _times: &[TimeSpec], _fs: &mut FatFileSystem<D>) -> Result<usize> {
         Err(Error::new(EBADF))
     }
 }
@@ -158,18 +159,18 @@ pub struct FileResource<'a, T: Read + Write + Seek + 'a> {
     flags: usize,
     seek: u64,
     uid: u32,
-    file: File<'a, T>
+    //file: File<'a, T>
 }
 
 impl<'a, T: Read + Write + Seek + 'a> FileResource<'a, T> {
-    pub fn new(fpath: String, block: u64, flags: usize, seek: u64, uid: u32, file: File<T>) -> FileResource<T> {
+    pub fn new(fpath: String, block: u64, flags: usize, seek: u64, uid: u32) -> FileResource<T> {
         FileResource {
             path: fpath,
             block: block,
             flags: flags,
             seek: seek,
             uid: uid,
-            file: file
+            //file: file
         }
     }
 }
@@ -190,7 +191,7 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for FileResource<'a, D> {
         }))
     }
     */
-    fn read(&mut self, buf: &mut [u8], fs: &mut FileSystem<D>) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8], fs: &mut FatFileSystem<D>) -> Result<usize> {
         /*if self.flags & O_ACCMODE == O_RDWR || self.flags & O_ACCMODE == O_RDONLY {
             let count = fs.read_node(self.block, self.seek, buf)?;
             self.seek += count as u64;
@@ -201,7 +202,7 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for FileResource<'a, D> {
         Ok(0) // TODO
     }
 
-    fn write(&mut self, buf: &[u8], fs: &mut FileSystem<D>) -> Result<usize> {
+    fn write(&mut self, buf: &[u8], fs: &mut FatFileSystem<D>) -> Result<usize> {
         /*if self.flags & O_ACCMODE == O_RDWR || self.flags & O_ACCMODE == O_WRONLY {
             let mtime = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             let count = fs.write_node(self.block, self.seek, buf, mtime.as_secs(), mtime.subsec_nanos())?;
@@ -213,7 +214,7 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for FileResource<'a, D> {
         Ok(0) // TODO
     }
     
-    fn seek(&mut self, offset: usize, whence: usize, fs: &mut FileSystem<D>) -> Result<usize> {
+    fn seek(&mut self, offset: usize, whence: usize, fs: &mut FatFileSystem<D>) -> Result<usize> {
         /*let size = fs.node_len(self.block)?;
 
         self.seek = match whence {
@@ -228,11 +229,11 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for FileResource<'a, D> {
         Ok(0) // TODO
     }
 
-    fn fchmod(&mut self, mode: u16, fs: &mut FileSystem<D>) -> Result<usize> {
+    fn fchmod(&mut self, mode: u16, fs: &mut FatFileSystem<D>) -> Result<usize> {
         Ok(0) // FAT does not have file permissions
     }
 
-    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FileSystem<D>) -> Result<usize> {
+    fn fchown(&mut self, uid: u32, gid: u32, fs: &mut FatFileSystem<D>) -> Result<usize> {
         Ok(0) // FAT does not have file permissions
     }
 
@@ -259,7 +260,7 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for FileResource<'a, D> {
         Ok(i)
     }
 
-    fn stat(&self, stat: &mut Stat, fs: &mut FileSystem<D>) -> Result<usize> {
+    fn stat(&self, stat: &mut Stat, fs: &mut FatFileSystem<D>) -> Result<usize> {
         /*let node = fs.node(self.block)?;
 
         *stat = Stat {
@@ -280,7 +281,7 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for FileResource<'a, D> {
         Ok(0)
     }
     
-    fn truncate(&mut self, len: usize, fs: &mut FileSystem<D>) -> Result<usize> {
+    fn truncate(&mut self, len: usize, fs: &mut FatFileSystem<D>) -> Result<usize> {
         /*if self.flags & O_ACCMODE == O_RDWR || self.flags & O_ACCMODE == O_WRONLY {
             fs.node_set_len(self.block, len as u64)?;
             Ok(0)
@@ -291,7 +292,7 @@ impl<'a, D: Read + Write + Seek + 'a> Resource<D> for FileResource<'a, D> {
 
     }
 
-    fn utimens(&mut self, times: &[TimeSpec], fs: &mut FileSystem<D>) -> Result<usize> {
+    fn utimens(&mut self, times: &[TimeSpec], fs: &mut FatFileSystem<D>) -> Result<usize> {
         /*let mut node = fs.node(self.block)?;
 
         if node.1.uid == self.uid || self.uid == 0 {
